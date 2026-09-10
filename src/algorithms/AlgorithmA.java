@@ -5,10 +5,11 @@ import models.OperationCounter;
 import utils.Tokenizer;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
-public class AlgorithmB {
+public class AlgorithmA {
 
     public ExpressionResult evaluate(String expression) {
         long startTime = System.nanoTime();
@@ -16,9 +17,11 @@ public class AlgorithmB {
 
         try {
             List<String> tokens = Tokenizer.tokenize(expression);
-            double result = evaluateInfix(tokens, counter);
+            List<String> postfix = infixToPostfix(tokens, counter);
+            double result = evaluatePostfix(postfix, counter);
+            String postfixStr = String.join(" ", postfix);
             long elapsedTime = System.nanoTime() - startTime;
-            return ExpressionResult.success(result, "(ไม่ได้สร้าง Postfix ใน Algorithm B)", elapsedTime, counter);
+            return ExpressionResult.success(result, postfixStr, elapsedTime, counter);
         } catch (Exception e) {
             long elapsedTime = System.nanoTime() - startTime;
             String errorMessage = (e.getMessage() != null && !e.getMessage().isEmpty()) 
@@ -28,16 +31,15 @@ public class AlgorithmB {
         }
     }
 
-    public double evaluateInfix(List<String> tokens, OperationCounter counter) {
-        Deque<Double> operandStack = new ArrayDeque<>();
+    public List<String> infixToPostfix(List<String> tokens, OperationCounter counter) {
+        List<String> postfix = new ArrayList<>();
         Deque<String> operatorStack = new ArrayDeque<>();
 
         for (String token : tokens) {
             if (counter != null) counter.incrementLoop();
 
             if (Tokenizer.isNumber(token)) {
-                operandStack.push(Double.parseDouble(token));
-                if (counter != null) counter.incrementPush();
+                postfix.add(token);
             } else if (token.equals("(")) {
                 operatorStack.push(token);
                 if (counter != null) counter.incrementPush();
@@ -45,14 +47,14 @@ public class AlgorithmB {
                 boolean foundOpen = false;
                 while (!operatorStack.isEmpty()) {
                     if (counter != null) counter.incrementComparison();
-                    String top = operatorStack.peek();
+                    String top = operatorStack.pop();
+                    if (counter != null) counter.incrementPop();
+
                     if (top.equals("(")) {
-                        operatorStack.pop();
-                        if (counter != null) counter.incrementPop();
                         foundOpen = true;
                         break;
                     }
-                    applyTopOperator(operandStack, operatorStack, counter);
+                    postfix.add(top);
                 }
                 if (!foundOpen) {
                     throw new IllegalArgumentException("วงเล็บไม่ครบคู่");
@@ -64,7 +66,8 @@ public class AlgorithmB {
                     if (top.equals("(")) break;
 
                     if (Tokenizer.priority(top) >= Tokenizer.priority(token)) {
-                        applyTopOperator(operandStack, operatorStack, counter);
+                        postfix.add(operatorStack.pop());
+                        if (counter != null) counter.incrementPop();
                     } else {
                         break;
                     }
@@ -77,12 +80,42 @@ public class AlgorithmB {
         }
 
         while (!operatorStack.isEmpty()) {
-            if (counter != null) counter.incrementComparison();
-            String top = operatorStack.peek();
+            String top = operatorStack.pop();
+            if (counter != null) counter.incrementPop();
             if (top.equals("(")) {
                 throw new IllegalArgumentException("วงเล็บไม่ครบคู่");
             }
-            applyTopOperator(operandStack, operatorStack, counter);
+            postfix.add(top);
+        }
+
+        return postfix;
+    }
+
+    public double evaluatePostfix(List<String> postfix, OperationCounter counter) {
+        Deque<Double> operandStack = new ArrayDeque<>();
+
+        for (String token : postfix) {
+            if (counter != null) counter.incrementLoop();
+
+            if (Tokenizer.isNumber(token)) {
+                operandStack.push(Double.parseDouble(token));
+                if (counter != null) counter.incrementPush();
+            } else if (Tokenizer.isOperator(token)) {
+                if (operandStack.size() < 2) {
+                    throw new IllegalArgumentException("รูปแบบนิพจน์ไม่ถูกต้อง: ตัวเลขไม่เพียงพอสำหรับเครื่องหมาย '" + token + "'");
+                }
+
+                double b = operandStack.pop();
+                double a = operandStack.pop();
+                if (counter != null) {
+                    counter.incrementPop();
+                    counter.incrementPop();
+                }
+
+                double result = calculate(a, token, b);
+                operandStack.push(result);
+                if (counter != null) counter.incrementPush();
+            }
         }
 
         if (operandStack.size() != 1) {
@@ -92,29 +125,6 @@ public class AlgorithmB {
         double finalResult = operandStack.pop();
         if (counter != null) counter.incrementPop();
         return finalResult;
-    }
-
-    private void applyTopOperator(Deque<Double> operandStack, Deque<String> operatorStack, OperationCounter counter) {
-        if (operatorStack.isEmpty()) {
-            throw new IllegalArgumentException("รูปแบบนิพจน์ไม่ถูกต้อง: เครื่องหมายไม่สมบูรณ์");
-        }
-        String op = operatorStack.pop();
-        if (counter != null) counter.incrementPop();
-
-        if (operandStack.size() < 2) {
-            throw new IllegalArgumentException("รูปแบบนิพจน์ไม่ถูกต้อง: ตัวเลขไม่เพียงพอสำหรับเครื่องหมาย '" + op + "'");
-        }
-
-        double b = operandStack.pop();
-        double a = operandStack.pop();
-        if (counter != null) {
-            counter.incrementPop();
-            counter.incrementPop();
-        }
-
-        double result = calculate(a, op, b);
-        operandStack.push(result);
-        if (counter != null) counter.incrementPush();
     }
 
     private double calculate(double a, String op, double b) {
@@ -133,41 +143,61 @@ public class AlgorithmB {
     }
 
     public void traceEvaluate(String expression) {
-        System.out.println("\n=== STEP-BY-STEP TRACE (Algorithm B) ===");
+        System.out.println("\n=== STEP-BY-STEP TRACE (Algorithm A) ===");
         try {
             List<String> tokens = Tokenizer.tokenize(expression);
-            Deque<Double> operandStack = new ArrayDeque<>();
             Deque<String> operatorStack = new ArrayDeque<>();
+            List<String> postfixList = new ArrayList<>();
 
-            System.out.println("Token | Operand Stack | Operator Stack");
+            System.out.println("\n--- Step 1: Infix to Postfix Conversion ---");
+            System.out.println("Token | Operator Stack | Postfix List");
             System.out.println("---------------------------------------------------------------");
 
             for (String token : tokens) {
                 if (Tokenizer.isNumber(token)) {
-                    operandStack.push(Double.parseDouble(token));
+                    postfixList.add(token);
                 } else if (token.equals("(")) {
                     operatorStack.push(token);
                 } else if (token.equals(")")) {
                     while (!operatorStack.isEmpty() && !operatorStack.peek().equals("(")) {
-                        applyTopOperator(operandStack, operatorStack, null);
+                        postfixList.add(operatorStack.pop());
                     }
                     if (operatorStack.isEmpty()) throw new IllegalArgumentException("วงเล็บไม่ครบคู่");
                     operatorStack.pop();
                 } else if (Tokenizer.isOperator(token)) {
                     while (!operatorStack.isEmpty() && !operatorStack.peek().equals("(")
                             && Tokenizer.priority(operatorStack.peek()) >= Tokenizer.priority(token)) {
-                        applyTopOperator(operandStack, operatorStack, null);
+                        postfixList.add(operatorStack.pop());
                     }
                     operatorStack.push(token);
                 }
-                System.out.println(token + " | " + operandStack.toString() + " | " + operatorStack.toString());
+                System.out.println(token + " | " + operatorStack.toString() + " | " + String.join(" ", postfixList));
             }
 
             while (!operatorStack.isEmpty()) {
                 if (operatorStack.peek().equals("(")) throw new IllegalArgumentException("วงเล็บไม่ครบคู่");
-                applyTopOperator(operandStack, operatorStack, null);
+                postfixList.add(operatorStack.pop());
             }
-            System.out.println("(End) | " + operandStack.toString() + " | " + operatorStack.toString());
+            System.out.println("(End) | " + operatorStack.toString() + " | " + String.join(" ", postfixList));
+
+            System.out.println("\n--- Step 2: Postfix Evaluation Trace ---");
+            System.out.println("Token | Operand Stack");
+            System.out.println("---------------------------------------------------------------");
+
+            Deque<Double> operandStack = new ArrayDeque<>();
+            for (String token : postfixList) {
+                if (Tokenizer.isNumber(token)) {
+                    operandStack.push(Double.parseDouble(token));
+                } else if (Tokenizer.isOperator(token)) {
+                    if (operandStack.size() < 2) {
+                        throw new IllegalArgumentException("ตัวเลขไม่เพียงพอสำหรับเครื่องหมาย '" + token + "'");
+                    }
+                    double b = operandStack.pop();
+                    double a = operandStack.pop();
+                    operandStack.push(calculate(a, token, b));
+                }
+                System.out.println(token + " | " + operandStack.toString());
+            }
 
             System.out.println("\nResult: " + operandStack.peek());
         } catch (Exception e) {
